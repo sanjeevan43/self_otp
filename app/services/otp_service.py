@@ -163,6 +163,11 @@ class OTPService:
                 if otp_record:
                     otp_record.status = OTPStatus.EXPIRED
 
+                # Auto-block phone number temporarily for 1 hour due to max verification attempt failure
+                from app.core.rate_limit import block_phone_number
+
+                await block_phone_number(redis, phone_hash, duration_seconds=3600)
+
                 if redis is not None:
                     try:
                         await redis.delete(key)

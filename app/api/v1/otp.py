@@ -24,6 +24,12 @@ from app.schemas.otp import (
     OTPVerifyRequest,
     OTPVerifyResponse,
 )
+from app.core.idempotency import get_idempotent_response, save_idempotent_response
+from app.core.rate_limit import (
+    is_customer_blocked,
+    is_phone_blocked,
+    is_rate_limited,
+)
 from app.services.meta_service import MetaService
 from app.services.otp_service import OTPService
 from app.services.wallet_service import WalletService
@@ -35,6 +41,7 @@ router = APIRouter(prefix="/otp", tags=["OTP Operations"])
 @router.post("/send", response_model=OTPSendResponse, status_code=status.HTTP_202_ACCEPTED)
 async def send_otp(
     request: OTPSendRequest,
+    req_obj: Request,
     api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
     db: Annotated[AsyncSession, Depends(get_db)],
     redis: aioredis.Redis | None = Depends(get_redis),
@@ -42,12 +49,113 @@ async def send_otp(
     """
     Triggers OTP delivery to the customer's WhatsApp phone number.
     Deducts wallet balance atomically and queues async Meta delivery.
+    Enforces multi-tier rate limits, phone/customer blocking, and idempotency.
     """
     api_key, customer = api_auth
     phone_hash = hash_phone_number(request.phone_number)
     masked_phone = mask_phone_number(request.phone_number)
+    client_ip = req_obj.client.host if req_obj.client else "127.0.0.1"
+    idempotency_key = req_obj.headers.get("idempotency-key")
 
-    # 1. Enforce 60-second cooldown per target phone number
+    # 1. Customer Abuse Protection (TASK-080)
+    customer_blocked = await is_customer_blocked(redis, customer.id)
+    if customer_blocked or customer.status.value != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "CUSTOMER_BLOCKED",
+                "message": "Customer account is suspended or blocked due to policy violations.",
+            },
+        )
+
+    # 2. Temporary Phone Blocking (TASK-079)
+    phone_blocked = await is_phone_blocked(redis, phone_hash)
+    if phone_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "PHONE_BLOCKED",
+                "message": "This phone number is temporarily blocked due to excessive failed attempts or abuse.",
+            },
+        )
+
+    # 3. Duplicate Request / Idempotency Check (TASK-077)
+    if idempotency_key:
+        cached = await get_idempotent_response(
+            redis=redis,
+            session=db,
+            customer_id=customer.id,
+            idempotency_key=idempotency_key,
+            endpoint="/v1/otp/send",
+        )
+        if cached:
+            return cached
+
+    # 4. IP Rate Limiting (TASK-072) - Max 10 per minute
+    ip_limited, _ = await is_rate_limited(
+        redis=redis,
+        key=f"ip:{client_ip}:otp:send",
+        max_requests=10,
+        window_seconds=60,
+    )
+    if ip_limited:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "IP_RATE_LIMITED",
+                "message": "Too many requests from this IP address. Please slow down.",
+            },
+        )
+
+    # 5. Phone-Number Rate Limiting (TASK-073) - Max 3 per 10 minutes
+    phone_limited, _ = await is_rate_limited(
+        redis=redis,
+        key=f"phone:{phone_hash}:otp:send",
+        max_requests=3,
+        window_seconds=600,
+    )
+    if phone_limited:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "PHONE_RATE_LIMITED",
+                "message": "Too many OTP requests for this phone number. Please wait.",
+            },
+        )
+
+    # 6. Customer Rate Limiting (TASK-074) - Max 60 per minute
+    cust_limited, _ = await is_rate_limited(
+        redis=redis,
+        key=f"customer:{customer.id}:otp:send",
+        max_requests=60,
+        window_seconds=60,
+    )
+    if cust_limited:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "CUSTOMER_RATE_LIMITED",
+                "message": "Customer rate limit exceeded.",
+            },
+        )
+
+    # 7. API-Key Rate Limiting (TASK-075) - Rate Limit RPS
+    key_limited, _ = await is_rate_limited(
+        redis=redis,
+        key=f"api_key:{api_key.id}:otp:send",
+        max_requests=getattr(api_key, "rate_limit_rps", settings.DEFAULT_API_KEY_RATE_LIMIT_RPS),
+        window_seconds=1,
+    )
+    if key_limited:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "API_KEY_RATE_LIMITED",
+                "message": "API key rate limit exceeded.",
+            },
+        )
+
+    # 8. Enforce 60-second cooldown per target phone number (TASK-076)
     in_cooldown = await OTPService.check_phone_cooldown(redis, phone_hash)
     if in_cooldown:
         raise HTTPException(
@@ -132,7 +240,7 @@ async def send_otp(
 
     await db.commit()
 
-    return {
+    response_data = {
         "status": "success",
         "data": {
             "request_id": request_id,
@@ -142,6 +250,20 @@ async def send_otp(
             "cost_credits": cost,
         },
     }
+
+    if idempotency_key:
+        await save_idempotent_response(
+            redis=redis,
+            session=db,
+            customer_id=customer.id,
+            idempotency_key=idempotency_key,
+            endpoint="/v1/otp/send",
+            request_body=request.model_dump(),
+            response_body=response_data,
+        )
+        await db.commit()
+
+    return response_data
 
 
 @router.post("/verify", response_model=OTPVerifyResponse, status_code=status.HTTP_200_OK)
