@@ -15,6 +15,9 @@ from app.tasks.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+from app.services.whatsapp_service import whatsapp_service
+
+
 async def _send_otp_async(
     otp_request_db_id: str,
     request_id: str,
@@ -25,47 +28,57 @@ async def _send_otp_async(
     customer_id: str,
     cost_credits: float,
 ) -> None:
-    """Async execution helper for Celery task."""
+    """Async execution helper for Celery task using decoupled WhatsAppService."""
     async with AsyncSessionLocal() as session:
         try:
-            success, wamid, error_msg = await MetaService.send_whatsapp_otp(
-                phone_number, otp_code, template_name, language_code
+            res = await whatsapp_service.send_otp(
+                phone_number=phone_number,
+                otp_code=otp_code,
+                template_name=template_name,
+                language_code=language_code,
             )
 
             stmt = select(OTPRequest).where(OTPRequest.id == otp_request_db_id)
             otp_record = (await session.execute(stmt)).scalar_one_or_none()
 
-            # Create Message record
+            # Create Message record storing provider_message_id (wamid)
             msg = Message(
                 customer_id=customer_id,
                 otp_request_id=otp_request_db_id,
                 phone_number=phone_number,
                 provider="meta",
-                provider_message_id=wamid,
-                status=MessageStatus.SENT if success else MessageStatus.FAILED,
-                error_message=error_msg if not success else None,
+                provider_message_id=res.provider_message_id,
+                status=MessageStatus.SENT if res.success else MessageStatus.FAILED,
+                error_message=res.error_message if not res.success else None,
             )
             session.add(msg)
 
             if otp_record:
-                if success:
+                if res.success:
                     otp_record.status = OTPStatus.SENT
                 else:
                     otp_record.status = OTPStatus.FAILED
-                    # Refund wallet on failure
-                    await WalletService.refund_credits(
-                        session=session,
-                        customer_id=customer_id,
-                        cost=cost_credits,
-                        reference_type="otp_request_failure",
-                        reference_id=request_id,
-                        reason=error_msg or "Meta API delivery failed",
-                    )
+                    # Permanent failure -> execute wallet refund immediately
+                    if not res.is_temporary_error:
+                        await WalletService.refund_credits(
+                            session=session,
+                            customer_id=customer_id,
+                            cost=cost_credits,
+                            reference_type="otp_request_failure",
+                            reference_id=request_id,
+                            reason=res.error_message or "Meta API permanent failure",
+                        )
 
             await session.commit()
+
+            # If temporary error, raise exception to trigger Celery task retry
+            if not res.success and res.is_temporary_error:
+                raise RuntimeError(res.error_message or "Temporary delivery failure")
+
         except Exception as e:
             await session.rollback()
             logger.exception(f"Error executing _send_otp_async for request {request_id}: {e}")
+            raise
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=5)
