@@ -208,17 +208,20 @@ async def send_otp(
     # 6. Set 60-second phone cooldown
     await OTPService.set_phone_cooldown(redis, phone_hash)
 
-    # 7. Dispatch to Meta WhatsApp Cloud API asynchronously via Celery (or direct async fallback in dev)
+    # 7. Dispatch to Meta WhatsApp Cloud API asynchronously via Celery (TASK-097)
     try:
-        send_whatsapp_otp_task.delay(
-            otp_request_db_id=otp_record.id,
-            request_id=request_id,
-            phone_number=request.phone_number,
-            otp_code=otp_code,
-            template_name=request.template_name,
-            language_code=request.language_code,
-            customer_id=customer.id,
-            cost_credits=cost,
+        send_whatsapp_otp_task.apply_async(
+            kwargs={
+                "otp_request_db_id": otp_record.id,
+                "request_id": request_id,
+                "phone_number": request.phone_number,
+                "otp_code": otp_code,
+                "template_name": request.template_name,
+                "language_code": request.language_code,
+                "customer_id": customer.id,
+                "cost_credits": cost,
+            },
+            queue="otp_messages",
         )
     except Exception:
         # Fallback for dev mode when Celery broker is not running
@@ -387,15 +390,18 @@ async def resend_otp(
 
     # 5. Dispatch async Meta message
     try:
-        send_whatsapp_otp_task.delay(
-            otp_request_db_id=otp_record.id,
-            request_id=otp_record.request_id,
-            phone_number=otp_record.phone_number,
-            otp_code=new_otp_code,
-            template_name="otp_auth_v1",
-            language_code="en_US",
-            customer_id=customer.id,
-            cost_credits=cost,
+        send_whatsapp_otp_task.apply_async(
+            kwargs={
+                "otp_request_db_id": otp_record.id,
+                "request_id": otp_record.request_id,
+                "phone_number": otp_record.phone_number,
+                "otp_code": new_otp_code,
+                "template_name": "otp_auth_v1",
+                "language_code": "en_US",
+                "customer_id": customer.id,
+                "cost_credits": cost,
+            },
+            queue="otp_messages",
         )
     except Exception:
         success, _wamid, _err = await MetaService.send_whatsapp_otp(

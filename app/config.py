@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    CELERY_TASK_MAX_RETRIES: int = 3
+    CELERY_TASK_TIME_LIMIT: int = 30
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 25
 
     PEPPER: str = "dev_pepper_secret_12345"
     JWT_ALGORITHM: str = "HS256"
