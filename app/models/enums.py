@@ -141,3 +141,8 @@ class RateLimitAction(str, enum.Enum):
     OTP_VERIFY = "otp_verify"
     API_REQUEST = "api_request"
     LOGIN = "login"
+
+
+class EnvironmentType(str, enum.Enum):
+    DEVELOPMENT = "development"
+    PRODUCTION = "production"

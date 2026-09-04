@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UUID
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,10 +22,10 @@ class OTPRequest(Base, UUIDMixin):
     __tablename__ = "otp_requests"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("customers.id"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("customers.id"), nullable=False, index=True
     )
     api_key_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("api_keys.id"), nullable=True
+        UUID(as_uuid=False), ForeignKey("api_keys.id"), nullable=True
     )
     request_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     phone_number: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
@@ -54,7 +54,7 @@ class OTPVerification(Base, UUIDMixin):
     __tablename__ = "otp_verifications"
 
     otp_request_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("otp_requests.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("otp_requests.id", ondelete="CASCADE"), nullable=False, index=True
     )
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
     result: Mapped[OTPVerificationResult] = mapped_column(

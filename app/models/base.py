@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, String, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -11,7 +11,7 @@ def utc_now() -> datetime:
 
 class UUIDMixin:
     id: Mapped[str] = mapped_column(
-        String(36),
+        UUID(as_uuid=False),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
         index=True,

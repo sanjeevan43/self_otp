@@ -1,7 +1,25 @@
+from datetime import datetime
 from typing import Any
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel
+class WebhookCreate(BaseModel):
+    url: str = Field(..., max_length=500)
+    description: str | None = Field(None, max_length=500)
+    application_id: str
+    subscribed_events: list[str]
 
+class WebhookResponse(BaseModel):
+    id: str
+    application_id: str
+    url: str
+    description: str | None
+    is_active: bool
+    subscribed_events: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class MetaWebhookPayload(BaseModel):
     object: str | None = None

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UUID
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,13 +23,13 @@ class Message(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "messages"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("customers.id"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("customers.id"), nullable=False, index=True
     )
     otp_request_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("otp_requests.id"), nullable=True, index=True
+        UUID(as_uuid=False), ForeignKey("otp_requests.id"), nullable=True, index=True
     )
     whatsapp_number_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("whatsapp_numbers.id"), nullable=True
+        UUID(as_uuid=False), ForeignKey("whatsapp_numbers.id"), nullable=True
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False, default="meta")
     provider_message_id: Mapped[str | None] = mapped_column(
@@ -61,7 +61,7 @@ class MessageEvent(Base, UUIDMixin):
     __tablename__ = "message_events"
 
     message_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True
     )
     event_type: Mapped[MessageEventType] = mapped_column(
         SQLEnum(MessageEventType), nullable=False, index=True

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import Enum as SQLEnum, String, UUID
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,7 +16,7 @@ class MetaAccount(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "meta_accounts"
 
     customer_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True
     )
     business_account_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     whatsapp_business_account_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -35,7 +35,7 @@ class WhatsAppNumber(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "whatsapp_numbers"
 
     meta_account_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("meta_accounts.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("meta_accounts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     phone_number_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     display_phone_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -56,7 +56,7 @@ class WhatsAppTemplate(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "whatsapp_templates"
 
     whatsapp_number_id: Mapped[str] = mapped_column(
-        String(36),
+        UUID(as_uuid=False),
         ForeignKey("whatsapp_numbers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

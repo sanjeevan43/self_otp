@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text, UUID
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,13 +11,17 @@ from app.models.enums import APIKeyStatus
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.application import Application
 
 
 class APIKey(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "api_keys"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    application_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -30,3 +34,4 @@ class APIKey(Base, UUIDMixin, TimestampMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped["Customer"] = relationship("Customer", back_populates="api_keys")
+    application: Mapped["Application"] = relationship("Application", back_populates="api_keys")

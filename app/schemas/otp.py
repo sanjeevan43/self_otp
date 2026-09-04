@@ -119,3 +119,16 @@ class OTPStatusResponse(BaseModel):
     status: str = "success"
     data: OTPStatusData
 
+class OTPRecordResponse(BaseModel):
+    id: str
+    phone_number: str
+    status: str
+    application_id: str | None = None
+    cost_credits: float
+    created_at: datetime
+    expires_at: datetime
+    verified_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+

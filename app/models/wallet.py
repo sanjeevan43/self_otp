@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, Text, UUID
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,7 +28,7 @@ class Wallet(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "wallets"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36),
+        UUID(as_uuid=False),
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
@@ -50,14 +50,14 @@ class WalletTransaction(Base, UUIDMixin):
     __tablename__ = "wallet_transactions"
 
     wallet_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("wallets.id"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("wallets.id"), nullable=False, index=True
     )
     transaction_type: Mapped[WalletTxnType] = mapped_column(SQLEnum(WalletTxnType), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     balance_before: Mapped[float] = mapped_column(Float, nullable=False)
     balance_after: Mapped[float] = mapped_column(Float, nullable=False)
     reference_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    reference_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False, index=True
@@ -86,7 +86,7 @@ class PricingRule(Base, UUIDMixin):
     __tablename__ = "pricing_rules"
 
     plan_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("pricing_plans.id"), nullable=True, index=True
+        UUID(as_uuid=False), ForeignKey("pricing_plans.id"), nullable=True, index=True
     )
     channel: Mapped[BillingChannel] = mapped_column(
         SQLEnum(BillingChannel), nullable=False, index=True
@@ -106,7 +106,7 @@ class PaymentOrder(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "payment_orders"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("customers.id"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("customers.id"), nullable=False, index=True
     )
     order_reference: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
@@ -125,7 +125,7 @@ class Payment(Base, UUIDMixin):
     __tablename__ = "payments"
 
     payment_order_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("payment_orders.id"), nullable=False, index=True
+        UUID(as_uuid=False), ForeignKey("payment_orders.id"), nullable=False, index=True
     )
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     amount: Mapped[float] = mapped_column(Float, nullable=False)

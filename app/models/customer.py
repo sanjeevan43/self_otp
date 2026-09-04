@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, UUID
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.meta import MetaAccount
     from app.models.user import User
     from app.models.wallet import Wallet
+    from app.models.application import Application
 
 
 def utc_now() -> datetime:
@@ -43,16 +44,19 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     meta_accounts: Mapped[list["MetaAccount"]] = relationship(
         "MetaAccount", back_populates="customer", cascade="all, delete-orphan"
     )
+    applications: Mapped[list["Application"]] = relationship(
+        "Application", back_populates="customer", cascade="all, delete-orphan"
+    )
 
 
 class CustomerUser(Base):
     __tablename__ = "customer_users"
 
     customer_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("customers.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[CustomerRole] = mapped_column(
         SQLEnum(CustomerRole), nullable=False, default=CustomerRole.MEMBER
