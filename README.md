@@ -1,21 +1,22 @@
 # WhatsApp OTP API SaaS Platform
 
-A production-ready, high-performance WhatsApp OTP API SaaS platform that abstracts Meta's WhatsApp Cloud API complexity behind a clean, developer-friendly REST interface.
+A production-grade, high-performance WhatsApp OTP API SaaS platform built on **Node.js, TypeScript, Fastify, Prisma, and BullMQ** that abstracts Meta's WhatsApp Cloud API complexity behind a clean, developer-friendly REST interface.
 
 ---
 
 ## Architecture & Technology Stack
 
-- **Backend Framework**: Python 3.12+, FastAPI, Pydantic v2
-- **Database & ORM**: PostgreSQL 16, SQLAlchemy 2.0 (Async), Alembic migrations
-- **Caching & Rate Limiting**: Redis 7+ (Sliding Window rate limiting, hashed OTP storage)
-- **Asynchronous Task Queue**: Celery + Redis broker
+- **Runtime & Language**: Node.js 22 (ES Modules) + TypeScript 5.7+ (strict mode)
+- **Web Framework**: Fastify 5.x (high performance, schema-driven with Zod)
+- **Database & ORM**: PostgreSQL 16 + Prisma ORM 6.4 (introspected models, schema integrity)
+- **Caching & Rate Limiting**: Redis 7+ via `ioredis` (sliding window rate limiting, idempotency caches)
+- **Asynchronous Task Queue**: BullMQ 5.4+ (decoupled worker processes for OTP delivery & webhook dispatch)
 - **Authentication & Security**:
-  - Dashboard: JWT with Argon2id password hashing
+  - Dashboard: JWT with Argon2id password hashing via `@node-rs/argon2`
   - Customer API: `X-API-Key` with SHA-256 hashed storage & pepper
-  - Crypto Safeguards: HMAC-SHA256 hashed phone numbers & OTP codes; constant-time string comparisons (`hmac.compare_digest`)
-- **Resilience**: Redis-backed Circuit Breaker for Meta Graph API calls; atomic SQL wallet credit debits
-- **Infrastructure**: Docker, Docker Compose, Nginx (SSL & rate limiting), GitHub Actions
+  - Crypto Safeguards: HMAC-SHA256 hashed phone numbers & OTP codes; constant-time string comparisons (`crypto.timingSafeEqual`)
+- **Resilience**: Circuit Breaker for Meta Graph API calls; atomic SQL wallet credit debits
+- **Infrastructure**: Docker multi-stage builds, Docker Compose (`api`, `worker`, `postgres`, `redis`), Nginx reverse proxy
 
 ---
 
@@ -34,17 +35,17 @@ A production-ready, high-performance WhatsApp OTP API SaaS platform that abstrac
                      |                                               |
                      v                                               v
           +--------------------+                           +--------------------+
-          | FastAPI Node 1     |                           | FastAPI Node 2     |
-          | (Uvicorn ASGI)     |                           | (Uvicorn ASGI)     |
+          | Fastify API Node 1 |                           | Fastify API Node 2 |
+          | (TypeScript)       |                           | (TypeScript)       |
           +--------------------+                           +--------------------+
                      |                                               |
          +-----------+-----------------------+-----------------------+-----------+
          |                                   |                                   |
          v                                   v                                   v
 +------------------+                +------------------+                +------------------+
-| PostgreSQL 16    |                | Redis 7          |                | Celery Workers   |
-| (Primary DB &    |                | (Rate Limit, OTP |                | (Meta Dispatch & |
-|  Ledger Storage) |                |  Cache, Broker)  |                |  Webhook Engine) |
+| PostgreSQL 16    |                | Redis 7          |                | BullMQ Workers   |
+| (Primary DB &    |                | (Rate Limit, OTP |                | (Independent     |
+|  Ledger Storage) |                |  Cache, BullMQ)  |                |  Worker Service) |
 +------------------+                +------------------+                +------------------+
                                                                                  |
                                                                                  v
@@ -59,14 +60,14 @@ A production-ready, high-performance WhatsApp OTP API SaaS platform that abstrac
 ## Quickstart & Local Development
 
 ### 1. Requirements & Setup
-Ensure Python 3.12+ and `uv` are installed.
+Ensure Node.js 22+ and npm are installed.
 
 ```bash
-# Clone repository
-cd /Users/sanjeev/Project/self_otp
+# Install dependencies
+npm install
 
-# Install dependencies into virtualenv
-uv pip install -e ".[dev]"
+# Generate Prisma Client
+npm run prisma:generate
 
 # Copy environment settings
 cp .env.example .env
@@ -75,37 +76,43 @@ cp .env.example .env
 ### 2. Run Test Suite & Quality Checks
 
 ```bash
-# Run pytest with coverage
-export PATH="$HOME/.local/bin:$PATH"
-uv run pytest --cov=app
+# Run full Vitest suite (integration, concurrency, provider, schema tests)
+npm run test
 
-# Run Ruff code linter
-uv run ruff check .
+# Type-check TypeScript codebase
+npm run typecheck
 
-# Run mypy static type analyzer
-uv run mypy app
+# Lint codebase
+npm run lint
+
+# Build production bundle
+npm run build
 ```
 
-### 3. Run FastAPI Application Locally
+### 3. Run Application Locally
 
 ```bash
-uv run uvicorn app.main:app --reload --port 8000
+# Start Fastify API server with live reloading
+npm run dev
+
+# In a separate terminal, start the BullMQ worker
+npm run worker:dev
 ```
-Interactive API Documentation will be available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+
+The API will be available at `http://localhost:8000`.
+Health endpoint: `http://localhost:8000/health`.
 
 ---
 
 ## Customer Integration Flow
 
 ### Step 1: Register Account & Create API Key
-1. POST `/v1/auth/register` to register your business organization.
-2. POST `/v1/auth/login` to receive JWT access token.
-3. POST `/v1/api-keys` with header `Authorization: Bearer <token>` to generate an API key (`wotp_live_...`).
+1. `POST /v1/auth/register` to register your business organization.
+2. `POST /v1/auth/login` to receive JWT access token.
+3. `POST /v1/api-keys` with header `Authorization: Bearer <token>` to generate an API key (`wotp_live_...`).
 
 ### Step 2: Send WhatsApp OTP
-POST `/v1/otp/send`
+`POST /v1/otp/send`
 ```http
 POST /v1/otp/send HTTP/1.1
 Host: api.yourdomain.com
@@ -119,7 +126,7 @@ Content-Type: application/json
 }
 ```
 
-Response (HTTP 202 Accepted):
+Response (`HTTP 202 Accepted`):
 ```json
 {
   "status": "success",
@@ -134,7 +141,7 @@ Response (HTTP 202 Accepted):
 ```
 
 ### Step 3: Verify Received OTP
-POST `/v1/otp/verify`
+`POST /v1/otp/verify`
 ```http
 POST /v1/otp/verify HTTP/1.1
 Host: api.yourdomain.com
@@ -147,7 +154,7 @@ Content-Type: application/json
 }
 ```
 
-Response (HTTP 200 OK):
+Response (`HTTP 200 OK`):
 ```json
 {
   "status": "success",
@@ -162,14 +169,21 @@ Response (HTTP 200 OK):
 
 ---
 
-## Production Deployment (Docker Compose & VPS)
+## Production Deployment (Docker Compose)
 
-Deploy to Ubuntu VPS using Docker Compose:
+Deploy using Docker Compose with dedicated `api` and `worker` services:
 
 ```bash
 # Build and run containers in detached mode
 docker compose up -d --build
 
-# Run Alembic migrations inside web container
-docker compose exec web alembic upgrade head
+# View logs of API and Worker
+docker compose logs -f api worker
 ```
+
+---
+
+## Migration History Note
+This repository was successfully migrated from an initial Python/FastAPI/Celery architecture to TypeScript/Fastify/BullMQ.
+- Historical database migrations are preserved under `migrations/legacy-alembic/`.
+- Full migration analysis and contract compatibility verifications are detailed in `migration-analysis.md`, `api-compatibility.md`, and `MIGRATION_REPORT.md`.

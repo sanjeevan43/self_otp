@@ -1,0 +1,809 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+}
+
+model alembic_version {
+  version_num String @id(map: "alembic_version_pkc") @db.VarChar(32)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model api_keys {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id    String          @db.Uuid
+  name           String          @db.VarChar(100)
+  key_prefix     String          @db.VarChar(20)
+  key_hash       String          @unique(map: "ix_api_keys_key_hash")
+  status         api_key_status  @default(active)
+  expires_at     DateTime?       @db.Timestamptz(6)
+  last_used_at   DateTime?       @db.Timestamptz(6)
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+  revoked_at     DateTime?       @db.Timestamptz(6)
+  application_id String          @db.Uuid
+  environment    environmenttype @default(DEVELOPMENT)
+  updated_at     DateTime        @db.Timestamptz(6)
+  applications   applications    @relation(fields: [application_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  customers      customers       @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  otp_requests   otp_requests[]
+
+  @@index([application_id], map: "ix_api_keys_application_id")
+  @@index([customer_id], map: "ix_api_keys_customer_id")
+  @@index([id], map: "ix_api_keys_id")
+  @@index([status], map: "ix_api_keys_status")
+}
+
+model api_request_logs {
+  org_id           String?  @db.Uuid
+  api_key_id       String?  @db.Uuid
+  endpoint         String   @db.VarChar(100)
+  method           String   @db.VarChar(10)
+  status_code      Int
+  response_time_ms Float
+  ip_address       String   @db.VarChar(45)
+  user_agent       String?
+  id               String   @id @db.Uuid
+  created_at       DateTime @db.Timestamptz(6)
+  updated_at       DateTime @db.Timestamptz(6)
+
+  @@index([api_key_id], map: "ix_api_request_logs_api_key_id")
+  @@index([id], map: "ix_api_request_logs_id")
+  @@index([org_id], map: "ix_api_request_logs_org_id")
+}
+
+model applications {
+  customer_id      String             @db.Uuid
+  name             String             @db.VarChar(100)
+  description      String?
+  id               String             @id @db.Uuid
+  created_at       DateTime           @db.Timestamptz(6)
+  updated_at       DateTime           @db.Timestamptz(6)
+  api_keys         api_keys[]
+  customers        customers          @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  idempotency_keys idempotency_keys[]
+  otp_requests     otp_requests[]
+  webhook_configs  webhook_configs[]
+
+  @@index([customer_id], map: "ix_applications_customer_id")
+  @@index([id], map: "ix_applications_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_logs {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String?    @db.Uuid
+  customer_id   String?    @db.Uuid
+  action        String     @db.VarChar(100)
+  resource_type String?    @db.VarChar(100)
+  resource_id   String?    @db.Uuid
+  ip_address    String?    @db.VarChar(45)
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  metadata_json Json?      @db.Json
+  customers     customers? @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users?     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "ix_audit_logs_created_at")
+  @@index([customer_id], map: "ix_audit_logs_customer_id")
+  @@index([id], map: "ix_audit_logs_id")
+  @@index([user_id], map: "ix_audit_logs_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_users {
+  customer_id String        @db.Uuid
+  user_id     String        @db.Uuid
+  role        customer_role @default(member)
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  customers   customers     @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users       users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([customer_id, user_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customers {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_name       String               @db.VarChar(255)
+  email              String               @unique(map: "ix_customers_email") @db.VarChar(255)
+  phone              String?              @db.VarChar(20)
+  status             customer_status      @default(active)
+  country_code       String               @default("+91") @db.VarChar(5)
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime             @default(now()) @db.Timestamptz(6)
+  api_keys           api_keys[]
+  applications       applications[]
+  audit_logs         audit_logs[]
+  customer_users     customer_users[]
+  idempotency_keys   idempotency_keys[]
+  messages           messages[]
+  meta_accounts      meta_accounts[]
+  notifications      notifications[]
+  otp_requests       otp_requests[]
+  payment_orders     payment_orders[]
+  rate_limit_records rate_limit_records[]
+  wallets            wallets?
+
+  @@index([id], map: "ix_customers_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model idempotency_keys {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id     String       @db.Uuid
+  idempotency_key String       @db.VarChar(255)
+  endpoint        String       @db.VarChar(255)
+  request_hash    String
+  response_status Int?
+  response_body   Json?        @db.Json
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  application_id  String       @db.Uuid
+  applications    applications @relation(fields: [application_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customers       customers    @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([application_id], map: "ix_idempotency_keys_application_id")
+  @@index([customer_id], map: "ix_idempotency_keys_customer_id")
+  @@index([id], map: "ix_idempotency_keys_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model message_events {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  message_id          String             @db.Uuid
+  event_type          message_event_type
+  provider_message_id String?            @db.VarChar(255)
+  event_data          Json?              @db.Json
+  created_at          DateTime           @default(now()) @db.Timestamptz(6)
+  messages            messages           @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([event_type], map: "ix_message_events_event_type")
+  @@index([id], map: "ix_message_events_id")
+  @@index([message_id], map: "ix_message_events_message_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model messages {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id         String            @db.Uuid
+  otp_request_id      String?           @db.Uuid
+  whatsapp_number_id  String?           @db.Uuid
+  provider            String            @default("meta") @db.VarChar(50)
+  provider_message_id String?           @db.VarChar(255)
+  phone_number        String            @db.VarChar(30)
+  message_type        message_type      @default(authentication)
+  status              message_status    @default(queued)
+  error_code          String?           @db.VarChar(100)
+  error_message       String?
+  sent_at             DateTime?         @db.Timestamptz(6)
+  delivered_at        DateTime?         @db.Timestamptz(6)
+  read_at             DateTime?         @db.Timestamptz(6)
+  failed_at           DateTime?         @db.Timestamptz(6)
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  message_events      message_events[]
+  customers           customers         @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  otp_requests        otp_requests?     @relation(fields: [otp_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  whatsapp_numbers    whatsapp_numbers? @relation(fields: [whatsapp_number_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([customer_id], map: "ix_messages_customer_id")
+  @@index([id], map: "ix_messages_id")
+  @@index([otp_request_id], map: "ix_messages_otp_request_id")
+  @@index([provider_message_id], map: "ix_messages_provider_message_id")
+  @@index([status], map: "ix_messages_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model meta_accounts {
+  id                           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id                  String?             @db.Uuid
+  business_account_id          String              @unique @db.VarChar(100)
+  whatsapp_business_account_id String?             @db.VarChar(100)
+  access_token_encrypted       String?
+  status                       meta_account_status @default(active)
+  created_at                   DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime            @default(now()) @db.Timestamptz(6)
+  customers                    customers?          @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  whatsapp_numbers             whatsapp_numbers[]
+
+  @@index([customer_id], map: "ix_meta_accounts_customer_id")
+  @@index([id], map: "ix_meta_accounts_id")
+}
+
+model meta_webhook_events {
+  meta_message_id String    @db.VarChar(100)
+  event_type      String    @db.VarChar(50)
+  payload         Json      @db.Json
+  status          String    @db.VarChar(20)
+  error_reason    String?
+  processed_at    DateTime? @db.Timestamptz(6)
+  id              String    @id @db.Uuid
+  created_at      DateTime  @db.Timestamptz(6)
+  updated_at      DateTime  @db.Timestamptz(6)
+
+  @@index([id], map: "ix_meta_webhook_events_id")
+  @@index([meta_message_id], map: "ix_meta_webhook_events_meta_message_id")
+  @@index([status], map: "ix_meta_webhook_events_status")
+}
+
+model notifications {
+  customer_id String    @db.Uuid
+  title       String    @db.VarChar(200)
+  message     String
+  type        String    @db.VarChar(50)
+  is_read     Boolean
+  read_at     DateTime? @db.Timestamptz(6)
+  id          String    @id @db.Uuid
+  created_at  DateTime  @db.Timestamptz(6)
+  updated_at  DateTime  @db.Timestamptz(6)
+  customers   customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([customer_id], map: "ix_notifications_customer_id")
+  @@index([id], map: "ix_notifications_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model otp_requests {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id       String              @db.Uuid
+  api_key_id        String?             @db.Uuid
+  request_id        String              @unique(map: "ix_otp_requests_request_id") @db.VarChar(100)
+  phone_number      String              @db.VarChar(30)
+  otp_hash          String
+  status            otp_status          @default(created)
+  expires_at        DateTime            @db.Timestamptz(6)
+  attempts          Int                 @default(0)
+  max_attempts      Int                 @default(5)
+  verified_at       DateTime?           @db.Timestamptz(6)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  application_id    String              @db.Uuid
+  messages          messages[]
+  api_keys          api_keys?           @relation(fields: [api_key_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  applications      applications        @relation(fields: [application_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customers         customers           @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  otp_verifications otp_verifications[]
+
+  @@index([application_id], map: "ix_otp_requests_application_id")
+  @@index([created_at], map: "ix_otp_requests_created_at")
+  @@index([customer_id], map: "ix_otp_requests_customer_id")
+  @@index([expires_at], map: "ix_otp_requests_expires_at")
+  @@index([id], map: "ix_otp_requests_id")
+  @@index([phone_number], map: "ix_otp_requests_phone_number")
+  @@index([status], map: "ix_otp_requests_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model otp_verifications {
+  id             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  otp_request_id String                  @db.Uuid
+  attempt_number Int
+  result         otp_verification_result
+  ip_address     String?                 @db.VarChar(45)
+  user_agent     String?
+  created_at     DateTime                @default(now()) @db.Timestamptz(6)
+  otp_requests   otp_requests            @relation(fields: [otp_request_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([id], map: "ix_otp_verifications_id")
+  @@index([otp_request_id], map: "ix_otp_verifications_otp_request_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model payment_orders {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id       String               @db.Uuid
+  order_reference   String               @unique @db.VarChar(100)
+  amount            Float
+  currency          String               @default("INR") @db.VarChar(10)
+  status            payment_order_status @default(created)
+  provider          String?              @db.VarChar(50)
+  provider_order_id String?              @db.VarChar(255)
+  created_at        DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime             @default(now()) @db.Timestamptz(6)
+  customers         customers            @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments          payments[]
+
+  @@index([customer_id], map: "ix_payment_orders_customer_id")
+  @@index([id], map: "ix_payment_orders_id")
+  @@index([status], map: "ix_payment_orders_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model payments {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payment_order_id    String         @db.Uuid
+  provider_payment_id String?        @db.VarChar(255)
+  amount              Float
+  currency            String         @default("INR") @db.VarChar(10)
+  status              payment_status
+  payment_method      String?        @db.VarChar(50)
+  provider_response   Json?          @db.Json
+  paid_at             DateTime?      @db.Timestamptz(6)
+  created_at          DateTime       @default(now()) @db.Timestamptz(6)
+  payment_orders      payment_orders @relation(fields: [payment_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([id], map: "ix_payments_id")
+  @@index([payment_order_id], map: "ix_payments_payment_order_id")
+  @@index([status], map: "ix_payments_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model pricing_plans {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String          @unique @db.VarChar(100)
+  description   String?
+  monthly_price Float           @default(0)
+  status        plan_status     @default(active)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  pricing_rules pricing_rules[]
+
+  @@index([id], map: "ix_pricing_plans_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model pricing_rules {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_id           String?         @db.Uuid
+  channel           billing_channel
+  country_code      String?         @db.VarChar(10)
+  price_per_message Float
+  currency          String          @default("INR") @db.VarChar(10)
+  active            Boolean         @default(true)
+  created_at        DateTime        @default(now()) @db.Timestamptz(6)
+  pricing_plans     pricing_plans?  @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([channel], map: "ix_pricing_rules_channel")
+  @@index([country_code], map: "ix_pricing_rules_country_code")
+  @@index([id], map: "ix_pricing_rules_id")
+  @@index([plan_id], map: "ix_pricing_rules_plan_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model rate_limit_records {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id   String?           @db.Uuid
+  phone_number  String?           @db.VarChar(30)
+  ip_address    String?           @db.VarChar(45)
+  action        rate_limit_action
+  request_count Int               @default(0)
+  window_start  DateTime          @db.Timestamptz(6)
+  window_end    DateTime          @db.Timestamptz(6)
+  created_at    DateTime          @default(now()) @db.Timestamptz(6)
+  customers     customers?        @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([customer_id], map: "ix_rate_limit_records_customer_id")
+  @@index([id], map: "ix_rate_limit_records_id")
+  @@index([phone_number], map: "ix_rate_limit_records_phone_number")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model users {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String           @unique(map: "ix_users_email") @db.VarChar(255)
+  password_hash  String
+  first_name     String?          @db.VarChar(100)
+  last_name      String?          @db.VarChar(100)
+  phone          String?          @db.VarChar(20)
+  status         user_status      @default(active)
+  email_verified Boolean          @default(false)
+  last_login_at  DateTime?        @db.Timestamptz(6)
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime         @default(now()) @db.Timestamptz(6)
+  audit_logs     audit_logs[]
+  customer_users customer_users[]
+  refresh_tokens refresh_tokens[]
+
+  @@index([id], map: "ix_users_id")
+}
+
+model refresh_tokens {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String           @db.Uuid
+  token_hash           String           @unique(map: "ix_refresh_tokens_token_hash") @db.VarChar(64)
+  family_id            String           @db.Uuid
+  expires_at           DateTime         @db.Timestamptz(6)
+  revoked_at           DateTime?        @db.Timestamptz(6)
+  replaced_by_token_id String?          @db.Uuid
+  created_at           DateTime         @default(now()) @db.Timestamptz(6)
+  last_used_at         DateTime?        @db.Timestamptz(6)
+
+  users                users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  replaced_by          refresh_tokens?  @relation("TokenReplacement", fields: [replaced_by_token_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  replaces             refresh_tokens[] @relation("TokenReplacement")
+
+  @@index([user_id], map: "idx_refresh_tokens_user_id")
+  @@index([family_id], map: "idx_refresh_tokens_family_id")
+  @@index([token_hash], map: "idx_refresh_tokens_token_hash")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wallet_transactions {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wallet_id        String          @db.Uuid
+  transaction_type wallet_txn_type
+  amount           Float
+  balance_before   Float
+  balance_after    Float
+  reference_type   String?         @db.VarChar(50)
+  reference_id     String?         @db.Uuid
+  description      String?
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  wallets          wallets         @relation(fields: [wallet_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "ix_wallet_transactions_created_at")
+  @@index([id], map: "ix_wallet_transactions_id")
+  @@index([reference_id], map: "ix_wallet_transactions_reference_id")
+  @@index([wallet_id], map: "ix_wallet_transactions_wallet_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wallets {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id         String                @unique(map: "ix_wallets_customer_id") @db.Uuid
+  currency            String                @default("INR") @db.VarChar(10)
+  balance             Float                 @default(0)
+  status              wallet_status         @default(active)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  wallet_transactions wallet_transactions[]
+  customers           customers             @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([id], map: "ix_wallets_id")
+}
+
+model webhook_configs {
+  application_id    String       @db.Uuid
+  url               String       @db.VarChar(500)
+  description       String?
+  secret            String       @db.VarChar(100)
+  is_active         Boolean
+  subscribed_events Json         @db.Json
+  id                String       @id @db.Uuid
+  created_at        DateTime     @db.Timestamptz(6)
+  updated_at        DateTime     @db.Timestamptz(6)
+  applications      applications @relation(fields: [application_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([application_id], map: "ix_webhook_configs_application_id")
+  @@index([id], map: "ix_webhook_configs_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model webhook_events {
+  id                String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider          String                    @db.VarChar(50)
+  event_type        String?                   @db.VarChar(100)
+  external_event_id String?                   @unique(map: "ix_webhook_events_external_event_id") @db.VarChar(255)
+  payload           Json                      @db.Json
+  processing_status webhook_processing_status @default(received)
+  error_message     String?
+  received_at       DateTime                  @default(now()) @db.Timestamptz(6)
+  processed_at      DateTime?                 @db.Timestamptz(6)
+
+  @@index([id], map: "ix_webhook_events_id")
+  @@index([processing_status], map: "ix_webhook_events_processing_status")
+  @@index([received_at], map: "ix_webhook_events_received_at")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model whatsapp_numbers {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  meta_account_id      String                 @db.Uuid
+  phone_number_id      String                 @unique @db.VarChar(100)
+  display_phone_number String?                @db.VarChar(30)
+  verified_name        String?                @db.VarChar(255)
+  status               whatsapp_number_status @default(active)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  messages             messages[]
+  meta_accounts        meta_accounts          @relation(fields: [meta_account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  whatsapp_templates   whatsapp_templates[]
+
+  @@index([id], map: "ix_whatsapp_numbers_id")
+  @@index([meta_account_id], map: "ix_whatsapp_numbers_meta_account_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model whatsapp_templates {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  whatsapp_number_id String           @db.Uuid
+  meta_template_id   String?          @db.VarChar(100)
+  name               String           @db.VarChar(255)
+  language_code      String           @db.VarChar(20)
+  category           String?          @db.VarChar(50)
+  status             template_status  @default(pending)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  whatsapp_numbers   whatsapp_numbers @relation(fields: [whatsapp_number_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([id], map: "ix_whatsapp_templates_id")
+  @@index([whatsapp_number_id], map: "ix_whatsapp_templates_whatsapp_number_id")
+}
+
+enum api_key_status {
+  active
+  revoked
+  expired
+}
+
+enum apikeystatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum billing_channel {
+  whatsapp
+  sms
+  voice
+  email
+}
+
+enum billingchannel {
+  WHATSAPP
+  SMS
+  VOICE
+  EMAIL
+}
+
+enum customer_role {
+  owner
+  admin
+  developer
+  member
+  billing
+}
+
+enum customer_status {
+  active
+  suspended
+  blocked
+  deleted
+}
+
+enum customerrole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  MEMBER
+  BILLING
+}
+
+enum customerstatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  DELETED
+}
+
+enum environmenttype {
+  DEVELOPMENT
+  PRODUCTION
+}
+
+enum message_event_type {
+  sent
+  delivered
+  read
+  failed
+  deleted
+}
+
+enum message_status {
+  queued
+  sent
+  delivered
+  read
+  failed
+}
+
+enum message_type {
+  authentication
+  utility
+  marketing
+}
+
+enum messageeventtype {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  DELETED
+}
+
+enum messagestatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum messagetype {
+  AUTHENTICATION
+  UTILITY
+  MARKETING
+}
+
+enum meta_account_status {
+  active
+  disabled
+  suspended
+}
+
+enum metaaccountstatus {
+  ACTIVE
+  DISABLED
+  SUSPENDED
+}
+
+enum otp_status {
+  created
+  queued
+  sent
+  delivered
+  verified
+  expired
+  failed
+  blocked
+}
+
+enum otp_verification_result {
+  correct
+  incorrect
+  expired
+  locked
+}
+
+enum otpstatus {
+  CREATED
+  QUEUED
+  SENT
+  DELIVERED
+  VERIFIED
+  EXPIRED
+  FAILED
+  BLOCKED
+}
+
+enum otpverificationresult {
+  CORRECT
+  INCORRECT
+  EXPIRED
+  LOCKED
+}
+
+enum payment_order_status {
+  created
+  pending
+  paid
+  failed
+  cancelled
+  expired
+}
+
+enum payment_status {
+  initiated
+  success
+  failed
+  refunded
+}
+
+enum paymentorderstatus {
+  CREATED
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum paymentstatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum plan_status {
+  active
+  archived
+}
+
+enum planstatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum rate_limit_action {
+  otp_send
+  otp_verify
+  api_request
+  login
+}
+
+enum ratelimitaction {
+  OTP_SEND
+  OTP_VERIFY
+  API_REQUEST
+  LOGIN
+}
+
+enum template_status {
+  pending
+  approved
+  rejected
+  disabled
+}
+
+enum templatestatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DISABLED
+}
+
+enum user_status {
+  active
+  suspended
+  blocked
+  deleted
+}
+
+enum userstatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  DELETED
+}
+
+enum wallet_status {
+  active
+  frozen
+  closed
+}
+
+enum wallet_txn_type {
+  credit
+  debit
+  refund
+  adjustment
+}
+
+enum walletstatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum wallettxntype {
+  CREDIT
+  DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+enum webhook_processing_status {
+  received
+  processed
+  failed
+  ignored
+}
+
+enum webhookprocessingstatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum whatsapp_number_status {
+  active
+  disabled
+  banned
+}
+
+enum whatsappnumberstatus {
+  ACTIVE
+  DISABLED
+  BANNED
+}

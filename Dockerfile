@@ -1,31 +1,45 @@
-FROM python:3.12-slim as builder
+# Multi-stage production build for Node.js 22 TypeScript
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copy package manifests and configurations
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY prisma ./prisma/
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir .
+# Install all dependencies (including devDependencies for compilation)
+RUN npm ci
 
-FROM python:3.12-slim
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Copy source code and build
+COPY src ./src
+COPY tests ./tests
+
+# Build TypeScript
+RUN npm run build
+
+# Prune devDependencies for production runtime
+RUN npm prune --production
+
+# ----------------------------------------------------
+# Production Runner
+# ----------------------------------------------------
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production
 
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-
-COPY . .
+# Copy node_modules, compiled dist, and prisma schemas
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package*.json ./
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Default entrypoint starts the API; worker service overrides CMD
+CMD ["node", "dist/src/server.js"]
