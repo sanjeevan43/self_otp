@@ -22,9 +22,6 @@ class Application(Base, UUIDMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    environment: Mapped[EnvironmentType] = mapped_column(
-        SQLEnum(EnvironmentType), nullable=False, default=EnvironmentType.DEVELOPMENT
-    )
 
     customer: Mapped["Customer"] = relationship("Customer", back_populates="applications")
     api_keys: Mapped[list["APIKey"]] = relationship(

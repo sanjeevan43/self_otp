@@ -29,6 +29,7 @@ async def create_api_key(
 
     api_key = APIKey(
         customer_id=customer.id,
+        application_id=key_in.application_id,
         name=key_in.name,
         key_prefix=key_prefix,
         key_hash=key_hash,
@@ -41,6 +42,7 @@ async def create_api_key(
     return {
         "id": api_key.id,
         "customer_id": api_key.customer_id,
+        "application_id": api_key.application_id,
         "name": api_key.name,
         "key_prefix": api_key.key_prefix,
         "status": api_key.status.value,

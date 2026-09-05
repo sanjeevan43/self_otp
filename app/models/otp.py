@@ -11,6 +11,7 @@ from app.models.enums import OTPStatus, OTPVerificationResult
 
 if TYPE_CHECKING:
     from app.models.api_key import APIKey
+    from app.models.application import Application
     from app.models.customer import Customer
 
 
@@ -23,6 +24,9 @@ class OTPRequest(Base, UUIDMixin):
 
     customer_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("customers.id"), nullable=False, index=True
+    )
+    application_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("applications.id"), nullable=False, index=True
     )
     api_key_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("api_keys.id"), nullable=True
@@ -44,6 +48,7 @@ class OTPRequest(Base, UUIDMixin):
     )
 
     customer: Mapped["Customer"] = relationship("Customer")
+    application: Mapped["Application"] = relationship("Application")
     api_key: Mapped["APIKey | None"] = relationship("APIKey")
     verifications: Mapped[list["OTPVerification"]] = relationship(
         "OTPVerification", back_populates="otp_request", cascade="all, delete-orphan"

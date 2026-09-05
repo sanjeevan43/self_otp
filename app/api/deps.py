@@ -67,14 +67,16 @@ async def get_current_user(
     return user, customer
 
 
-async def get_api_key_customer(
+from app.models.application import Application
+
+async def get_api_key_context(
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis | None = Depends(get_redis),
-) -> tuple[APIKey, Customer]:
+) -> tuple[APIKey, Application, Customer]:
     """
     Validates X-API-Key header, checks status, rate limits,
-    and returns (APIKey, Customer) tuple.
+    and returns (APIKey, Application, Customer) tuple to guarantee tenant isolation.
     """
     if not x_api_key:
         raise HTTPException(
@@ -88,7 +90,8 @@ async def get_api_key_customer(
     key_hash = hash_api_key(x_api_key)
 
     stmt = (
-        select(APIKey, Customer)
+        select(APIKey, Application, Customer)
+        .join(Application, APIKey.application_id == Application.id)
         .join(Customer, APIKey.customer_id == Customer.id)
         .where(APIKey.key_hash == key_hash, APIKey.status == APIKeyStatus.ACTIVE)
     )
@@ -101,7 +104,7 @@ async def get_api_key_customer(
             detail={"code": "UNAUTHORIZED", "message": "Invalid or revoked API key."},
         )
 
-    api_key, customer = row
+    api_key, application, customer = row
 
     if customer.status != CustomerStatus.ACTIVE:
         raise HTTPException(
@@ -125,4 +128,4 @@ async def get_api_key_customer(
             },
         )
 
-    return api_key, customer
+    return api_key, application, customer

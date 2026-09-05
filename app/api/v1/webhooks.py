@@ -85,25 +85,34 @@ async def process_meta_webhook(
                 status_str = status_item.get("status")
 
                 if wamid and status_str:
+                    event_idempotency_key = f"{wamid}_{status_str}"
                     webhook_event = WebhookEvent(
                         provider="meta",
                         event_type=status_str,
-                        external_event_id=wamid,
+                        external_event_id=event_idempotency_key,
                         payload=status_item,
                         processing_status=WebhookProcessingStatus.RECEIVED,
                     )
                     db.add(webhook_event)
-                    await db.flush()
-
-                    # Dispatch async Celery task
+                    
                     try:
-                        process_meta_webhook_task.delay(
-                            event_id=webhook_event.id,
-                            wamid=wamid,
-                            status_str=status_str,
-                        )
-                    except Exception:
-                        pass
+                        from sqlalchemy.exc import IntegrityError
+                        await db.flush()
+                        
+                        # Dispatch async Celery task only if successfully saved
+                        try:
+                            process_meta_webhook_task.delay(
+                                event_id=webhook_event.id,
+                                wamid=wamid,
+                                status_str=status_str,
+                            )
+                        except Exception:
+                            pass
+                    except IntegrityError:
+                        await db.rollback()
+                        logger.info(f"Duplicate webhook event ignored: {event_idempotency_key}")
+                        continue
 
     await db.commit()
     return {"status": "ok"}
+

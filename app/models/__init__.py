@@ -26,10 +26,11 @@ from app.models.enums import (
     WhatsAppNumberStatus,
 )
 from app.models.messaging import Message, MessageEvent, WebhookEvent
-from app.models.webhook import WebhookConfig
+from app.models.webhook import MetaWebhookEvent, WebhookConfig
 from app.models.notification import Notification
 from app.models.meta import MetaAccount, WhatsAppNumber, WhatsAppTemplate
 from app.models.otp import OTPRequest, OTPVerification
+from app.models.request_log import APIRequestLog
 from app.models.security_ops import AuditLog, IdempotencyKey, RateLimitRecord
 from app.models.user import User
 from app.models.wallet import (
@@ -44,6 +45,7 @@ from app.models.wallet import (
 __all__ = [
     "APIKey",
     "APIKeyStatus",
+    "APIRequestLog",
     "Application",
     "AuditLog",
     "BillingChannel",
@@ -60,6 +62,7 @@ __all__ = [
     "MessageType",
     "MetaAccount",
     "MetaAccountStatus",
+    "MetaWebhookEvent",
     "Notification",
     "OTPRequest",
     "OTPStatus",

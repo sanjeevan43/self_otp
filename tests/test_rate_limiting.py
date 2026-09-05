@@ -5,24 +5,36 @@ from app.core.rate_limit import block_customer, block_phone_number
 from app.core.hashing import hash_phone_number
 
 
-@pytest.mark.asyncio
-async def test_idempotency_duplicate_request_protection(client: AsyncClient) -> None:
-    # Register & setup API Key
-    await client.post(
+async def _setup_api_key(client: AsyncClient, company: str, email: str, password: str = "Password123!") -> tuple[str, str, str]:
+    """Helper: register, login, get default app, create API key. Returns (raw_api_key, access_token, customer_id)."""
+    reg_res = await client.post(
         "/v1/auth/register",
-        json={"company_name": "Idempotent Org", "email": "idem@test.com", "password": "Password123!"},
+        json={"company_name": company, "email": email, "password": password},
     )
+    customer_id = reg_res.json()["customer_id"]
     login_res = await client.post(
-        "/v1/auth/login", json={"email": "idem@test.com", "password": "Password123!"}
+        "/v1/auth/login", json={"email": email, "password": password}
     )
     access_token = login_res.json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get default application
+    apps_res = await client.get("/v1/applications", headers=auth_headers)
+    app_id = apps_res.json()[0]["id"]
+
     key_res = await client.post(
         "/v1/api-keys",
-        json={"name": "Idem Key"},
-        headers={"Authorization": f"Bearer {access_token}"},
+        json={"name": f"{company} Key", "application_id": app_id},
+        headers=auth_headers,
     )
+    return key_res.json()["raw_secret_key"], access_token, customer_id
+
+
+@pytest.mark.asyncio
+async def test_idempotency_duplicate_request_protection(client: AsyncClient) -> None:
+    raw_api_key, _, _ = await _setup_api_key(client, "Idempotent Org", "idem@test.com")
     headers = {
-        "X-API-Key": key_res.json()["raw_secret_key"],
+        "X-API-Key": raw_api_key,
         "Idempotency-Key": "idem_unique_key_12345",
     }
 
@@ -50,21 +62,8 @@ async def test_idempotency_duplicate_request_protection(client: AsyncClient) -> 
 
 @pytest.mark.asyncio
 async def test_temporary_phone_blocking(client: AsyncClient) -> None:
-    # Setup Auth & Key
-    await client.post(
-        "/v1/auth/register",
-        json={"company_name": "Phone Block Org", "email": "phoneblock@test.com", "password": "Password123!"},
-    )
-    login_res = await client.post(
-        "/v1/auth/login", json={"email": "phoneblock@test.com", "password": "Password123!"}
-    )
-    access_token = login_res.json()["access_token"]
-    key_res = await client.post(
-        "/v1/api-keys",
-        json={"name": "Phone Block Key"},
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    headers = {"X-API-Key": key_res.json()["raw_secret_key"]}
+    raw_api_key, _, _ = await _setup_api_key(client, "Phone Block Org", "phoneblock@test.com")
+    headers = {"X-API-Key": raw_api_key}
 
     target_phone = "+14155558888"
     phone_hash = hash_phone_number(target_phone)
@@ -84,23 +83,8 @@ async def test_temporary_phone_blocking(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_customer_abuse_blocking(client: AsyncClient) -> None:
-    # Setup Auth & Key
-    reg_res = await client.post(
-        "/v1/auth/register",
-        json={"company_name": "Abuse Org", "email": "abuse@test.com", "password": "Password123!"},
-    )
-    customer_id = reg_res.json()["customer_id"]
-
-    login_res = await client.post(
-        "/v1/auth/login", json={"email": "abuse@test.com", "password": "Password123!"}
-    )
-    access_token = login_res.json()["access_token"]
-    key_res = await client.post(
-        "/v1/api-keys",
-        json={"name": "Abuse Key"},
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    headers = {"X-API-Key": key_res.json()["raw_secret_key"]}
+    raw_api_key, _, customer_id = await _setup_api_key(client, "Abuse Org", "abuse@test.com")
+    headers = {"X-API-Key": raw_api_key}
 
     # Block customer account
     await block_customer(redis=None, customer_id=customer_id, duration_seconds=3600)

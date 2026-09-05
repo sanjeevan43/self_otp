@@ -20,7 +20,7 @@ def hash_request_body(body_data: Any) -> str:
 async def get_idempotent_response(
     redis: aioredis.Redis | None,
     session: AsyncSession,
-    customer_id: str,
+    application_id: str,
     idempotency_key: str,
     endpoint: str,
 ) -> dict[str, Any] | None:
@@ -28,7 +28,7 @@ async def get_idempotent_response(
     Checks if an idempotency key has already been processed.
     Returns stored response dict if found, otherwise None.
     """
-    cache_key = f"idempotency:{customer_id}:{idempotency_key}"
+    cache_key = f"idempotency:{application_id}:{idempotency_key}"
 
     if redis is not None:
         try:
@@ -43,7 +43,7 @@ async def get_idempotent_response(
 
     # Database fallback
     stmt = select(IdempotencyKey).where(
-        IdempotencyKey.customer_id == customer_id,
+        IdempotencyKey.application_id == application_id,
         IdempotencyKey.idempotency_key == idempotency_key,
         IdempotencyKey.endpoint == endpoint,
     )
@@ -57,6 +57,7 @@ async def get_idempotent_response(
 async def save_idempotent_response(
     redis: aioredis.Redis | None,
     session: AsyncSession,
+    application_id: str,
     customer_id: str,
     idempotency_key: str,
     endpoint: str,
@@ -66,7 +67,7 @@ async def save_idempotent_response(
     ttl_seconds: int = 86400,
 ) -> None:
     """Saves idempotent response to Redis and database for future duplicate requests."""
-    cache_key = f"idempotency:{customer_id}:{idempotency_key}"
+    cache_key = f"idempotency:{application_id}:{idempotency_key}"
     req_hash = hash_request_body(request_body)
 
     if redis is not None:
@@ -80,6 +81,7 @@ async def save_idempotent_response(
     # Save to database
     record = IdempotencyKey(
         customer_id=customer_id,
+        application_id=application_id,
         idempotency_key=idempotency_key,
         endpoint=endpoint,
         request_hash=req_hash,

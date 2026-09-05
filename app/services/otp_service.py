@@ -71,10 +71,11 @@ class OTPService:
         phone_hash: str,
         otp_code: str,
         request_id: str,
+        application_id: str,
         ttl_seconds: int,
     ) -> None:
         """Hashes OTP code and stores in Redis/Memory with expiration TTL."""
-        key = f"otp:store:{phone_hash}"
+        key = f"otp:store:{application_id}:{phone_hash}"
         hashed_otp = hash_otp_code(otp_code)
         data = {
             "otp_hash": hashed_otp,
@@ -99,6 +100,7 @@ class OTPService:
         redis: aioredis.Redis | None,
         phone_number: str,
         submitted_code: str,
+        application_id: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict[str, Any]:
@@ -107,7 +109,7 @@ class OTPService:
         Handles attempt counter, logs OTPVerification attempt, and invalidates on max attempts.
         """
         phone_hash = hash_phone_number(phone_number)
-        key = f"otp:store:{phone_hash}"
+        key = f"otp:store:{application_id}:{phone_hash}"
 
         stored_data = None
 
@@ -138,7 +140,10 @@ class OTPService:
         attempts = stored_data.get("attempts", 0) + 1
 
         # Fetch DB OTPRequest
-        stmt = select(OTPRequest).where(OTPRequest.request_id == request_id)
+        stmt = select(OTPRequest).where(
+            OTPRequest.request_id == request_id,
+            OTPRequest.application_id == application_id,
+        )
         otp_record = (await session.execute(stmt)).scalar_one_or_none()
 
         # Constant-time comparison
@@ -240,15 +245,15 @@ class OTPService:
     async def get_otp_status(
         session: AsyncSession,
         request_id: str,
-        customer_id: str,
+        application_id: str,
     ) -> dict[str, Any]:
         """
-        Retrieves current OTP status by request_id for a given customer.
+        Retrieves current OTP status by request_id for a given application.
         Handles checking for expiration and updating DB status if expired.
         """
         stmt = select(OTPRequest).where(
             OTPRequest.request_id == request_id,
-            OTPRequest.customer_id == customer_id,
+            OTPRequest.application_id == application_id,
         )
         otp_record = (await session.execute(stmt)).scalar_one_or_none()
 

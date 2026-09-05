@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class APIKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    application_id: str | None = None
+    application_id: str = Field(..., description="ID of the application this key belongs to")
 
 
 class APIKeyResponse(BaseModel):

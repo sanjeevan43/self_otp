@@ -8,6 +8,7 @@ from app.database import AsyncSessionLocal, Base, engine
 from app.models import (
     APIKey,
     APIKeyStatus,
+    Application,
     AuditLog,
     BillingChannel,
     Customer,
@@ -94,10 +95,20 @@ async def seed_database() -> None:
             )
             db.add(cu_link)
 
-            # 2. API Key
+            # 2. Application (required by APIKey, OTPRequest, IdempotencyKey)
+            application = Application(
+                customer_id=customer.id,
+                name="Acme Main App",
+                description="Primary production application",
+            )
+            db.add(application)
+            await db.flush()
+
+            # 3. API Key
             raw_key = "wotp_live_seed_key_1234567890"
             api_key = APIKey(
                 customer_id=customer.id,
+                application_id=application.id,
                 name="Primary Production Key",
                 key_prefix="wotp_live_",
                 key_hash=hash_api_key(raw_key),
@@ -105,7 +116,7 @@ async def seed_database() -> None:
             )
             db.add(api_key)
 
-            # 3. Meta Account, WhatsApp Number, WhatsApp Template
+            # 4. Meta Account, WhatsApp Number, WhatsApp Template
             meta_account = MetaAccount(
                 customer_id=customer.id,
                 business_account_id="seed_bba_1001",
@@ -136,7 +147,7 @@ async def seed_database() -> None:
             )
             db.add(template)
 
-            # 4. Pricing Plan & Rules
+            # 5. Pricing Plan & Rules
             plan = PricingPlan(
                 name="Enterprise Scale",
                 description="High volume enterprise OTP delivery plan",
@@ -156,7 +167,7 @@ async def seed_database() -> None:
             )
             db.add(rule)
 
-            # 5. Wallet & Transactions
+            # 6. Wallet & Transactions
             wallet = Wallet(
                 customer_id=customer.id,
                 currency="USD",
@@ -178,9 +189,10 @@ async def seed_database() -> None:
             )
             db.add(tx)
 
-            # 6. OTP Request & Verification
+            # 7. OTP Request & Verification
             otp_req = OTPRequest(
                 customer_id=customer.id,
+                application_id=application.id,
                 api_key_id=api_key.id,
                 request_id="req_seed_otp_8001",
                 phone_number="+14155552671",
@@ -203,7 +215,7 @@ async def seed_database() -> None:
             )
             db.add(verification)
 
-            # 7. Messages & Message Events
+            # 8. Messages & Message Events
             msg = Message(
                 customer_id=customer.id,
                 otp_request_id=otp_req.id,
@@ -227,7 +239,7 @@ async def seed_database() -> None:
             )
             db.add(msg_event)
 
-            # 8. Webhook Events
+            # 9. Webhook Events
             wb_event = WebhookEvent(
                 provider="meta",
                 event_type="delivered",
@@ -238,7 +250,7 @@ async def seed_database() -> None:
             )
             db.add(wb_event)
 
-            # 9. Payment Order & Payment
+            # 10. Payment Order & Payment
             order = PaymentOrder(
                 customer_id=customer.id,
                 order_reference="ord_seed_10001",
@@ -262,9 +274,10 @@ async def seed_database() -> None:
             )
             db.add(payment)
 
-            # 10. Security (Idempotency & Audit Logs)
+            # 11. Security (Idempotency & Audit Logs)
             idempotency = IdempotencyKey(
                 customer_id=customer.id,
+                application_id=application.id,
                 idempotency_key="idempotency_key_seed_001",
                 endpoint="/v1/otp/send",
                 request_hash="seed_request_hash_val",

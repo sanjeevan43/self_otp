@@ -5,12 +5,13 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_api_key_customer
+from app.api.deps import get_api_key_context
 from app.config import settings
 from app.core.hashing import hash_otp_code, hash_phone_number, mask_phone_number
 from app.database import get_db
 from app.models.api_key import APIKey
 from app.models.base import utc_now
+from app.models.application import Application
 from app.models.customer import Customer
 from app.models.enums import OTPStatus
 from app.models.otp import OTPRequest
@@ -42,7 +43,7 @@ router = APIRouter(prefix="/otp", tags=["OTP Operations"])
 async def send_otp(
     request: OTPSendRequest,
     req_obj: Request,
-    api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
+    api_auth: Annotated[tuple[APIKey, Application, Customer], Depends(get_api_key_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
     redis: aioredis.Redis | None = Depends(get_redis),
 ) -> dict[str, str | dict[str, Any]]:
@@ -51,7 +52,7 @@ async def send_otp(
     Deducts wallet balance atomically and queues async Meta delivery.
     Enforces multi-tier rate limits, phone/customer blocking, and idempotency.
     """
-    api_key, customer = api_auth
+    api_key, application, customer = api_auth
     phone_hash = hash_phone_number(request.phone_number)
     masked_phone = mask_phone_number(request.phone_number)
     client_ip = req_obj.client.host if req_obj.client else "127.0.0.1"
@@ -84,7 +85,7 @@ async def send_otp(
         cached = await get_idempotent_response(
             redis=redis,
             session=db,
-            customer_id=customer.id,
+            application_id=application.id,
             idempotency_key=idempotency_key,
             endpoint="/v1/otp/send",
         )
@@ -175,6 +176,7 @@ async def send_otp(
     # 3. Create OTPRequest record first
     otp_record = OTPRequest(
         customer_id=customer.id,
+        application_id=application.id,
         api_key_id=api_key.id,
         request_id=request_id,
         phone_number=request.phone_number,
@@ -202,6 +204,7 @@ async def send_otp(
         phone_hash=phone_hash,
         otp_code=otp_code,
         request_id=request_id,
+        application_id=application.id,
         ttl_seconds=request.ttl_seconds,
     )
 
@@ -258,6 +261,7 @@ async def send_otp(
         await save_idempotent_response(
             redis=redis,
             session=db,
+            application_id=application.id,
             customer_id=customer.id,
             idempotency_key=idempotency_key,
             endpoint="/v1/otp/send",
@@ -273,7 +277,7 @@ async def send_otp(
 async def verify_otp(
     request: OTPVerifyRequest,
     req_obj: Request,
-    api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
+    api_auth: Annotated[tuple[APIKey, Application, Customer], Depends(get_api_key_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
     redis: aioredis.Redis | None = Depends(get_redis),
 ) -> dict[str, str | dict[str, Any]]:
@@ -286,6 +290,7 @@ async def verify_otp(
         redis=redis,
         phone_number=request.phone_number,
         submitted_code=request.code,
+        application_id=application.id,
         ip_address=client_ip,
         user_agent=user_agent,
     )
@@ -299,21 +304,21 @@ async def verify_otp(
 @router.post("/resend", response_model=OTPResendResponse, status_code=status.HTTP_202_ACCEPTED)
 async def resend_otp(
     request: OTPResendRequest,
-    api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
+    api_auth: Annotated[tuple[APIKey, Application, Customer], Depends(get_api_key_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
     redis: aioredis.Redis | None = Depends(get_redis),
 ) -> dict[str, str | dict[str, Any]]:
     """
     Resends OTP for an active OTP request_id. Enforces 60-second cooldown per phone number.
     """
-    api_key, customer = api_auth
+    api_key, application, customer = api_auth
 
     # 1. Fetch OTP Request
     from sqlalchemy import select
 
     stmt = select(OTPRequest).where(
         OTPRequest.request_id == request.request_id,
-        OTPRequest.customer_id == customer.id,
+        OTPRequest.application_id == application.id,
     )
     otp_record = (await db.execute(stmt)).scalar_one_or_none()
 
@@ -384,6 +389,7 @@ async def resend_otp(
         phone_hash=phone_hash,
         otp_code=new_otp_code,
         request_id=otp_record.request_id,
+        application_id=application.id,
         ttl_seconds=ttl_seconds,
     )
     await OTPService.set_phone_cooldown(redis, phone_hash)
@@ -428,16 +434,16 @@ async def resend_otp(
 @router.get("/{request_id}", response_model=OTPStatusResponse, status_code=status.HTTP_200_OK)
 async def get_otp_status(
     request_id: str,
-    api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
+    api_auth: Annotated[tuple[APIKey, Application, Customer], Depends(get_api_key_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, str | dict[str, Any]]:
     """Retrieves OTP request status, attempt count, and expiration timing."""
-    _api_key, customer = api_auth
+    _api_key, application, customer = api_auth
 
     result = await OTPService.get_otp_status(
         session=db,
         request_id=request_id,
-        customer_id=customer.id,
+        application_id=application.id,
     )
     await db.commit()
     return {

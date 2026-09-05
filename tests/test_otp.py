@@ -13,11 +13,16 @@ async def test_otp_send_and_verify_flow(client: AsyncClient) -> None:
         "/v1/auth/login", json={"email": "otp@test.com", "password": "Password123!"}
     )
     access_token = login_res.json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get default application
+    apps_res = await client.get("/v1/applications", headers=auth_headers)
+    app_id = apps_res.json()[0]["id"]
 
     key_res = await client.post(
         "/v1/api-keys",
-        json={"name": "OTP Key"},
-        headers={"Authorization": f"Bearer {access_token}"},
+        json={"name": "OTP Key", "application_id": app_id},
+        headers=auth_headers,
     )
     raw_api_key = key_res.json()["raw_secret_key"]
     api_headers = {"X-API-Key": raw_api_key}
@@ -92,10 +97,16 @@ async def test_otp_max_attempts_lockout(client: AsyncClient) -> None:
         "/v1/auth/login", json={"email": "lock@test.com", "password": "Password123!"}
     )
     access_token = login_res.json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get default application
+    apps_res = await client.get("/v1/applications", headers=auth_headers)
+    app_id = apps_res.json()[0]["id"]
+
     key_res = await client.post(
         "/v1/api-keys",
-        json={"name": "Lock Key"},
-        headers={"Authorization": f"Bearer {access_token}"},
+        json={"name": "Lock Key", "application_id": app_id},
+        headers=auth_headers,
     )
     api_headers = {"X-API-Key": key_res.json()["raw_secret_key"]}
 
@@ -140,4 +151,3 @@ async def test_otp_max_attempts_lockout(client: AsyncClient) -> None:
     assert status_res.status_code == 200
     assert status_res.json()["data"]["status"] == "expired"
     assert status_res.json()["data"]["attempts"] == 3
-

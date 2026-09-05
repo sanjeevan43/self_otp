@@ -15,7 +15,15 @@ async def test_wallet_balance_and_ledger(client: AsyncClient) -> None:
     access_token = login_res.json()["access_token"]
     user_headers = {"Authorization": f"Bearer {access_token}"}
 
-    key_res = await client.post("/v1/api-keys", json={"name": "Wallet Key"}, headers=user_headers)
+    # Get default application
+    apps_res = await client.get("/v1/applications", headers=user_headers)
+    app_id = apps_res.json()[0]["id"]
+
+    key_res = await client.post(
+        "/v1/api-keys",
+        json={"name": "Wallet Key", "application_id": app_id},
+        headers=user_headers,
+    )
     raw_api_key = key_res.json()["raw_secret_key"]
     api_headers = {"X-API-Key": raw_api_key}
 

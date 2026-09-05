@@ -12,6 +12,7 @@ from app.core.security import (
     verify_password,
 )
 from app.database import get_db
+from app.models.application import Application
 from app.models.customer import Customer, CustomerUser
 from app.models.enums import CustomerRole, CustomerStatus, UserStatus
 from app.models.user import User
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def register(
     user_in: UserCreate, db: Annotated[AsyncSession, Depends(get_db)]
 ) -> dict[str, Any]:
-    """Business registers, creates Customer, Admin User, CustomerUser link, and Wallet."""
+    """Business registers, creates Customer, Admin User, CustomerUser link, default Application, and Wallet."""
     # Check if user email exists
     stmt = select(User).where(User.email == user_in.email)
     existing_user = (await db.execute(stmt)).scalar_one_or_none()
@@ -70,6 +71,15 @@ async def register(
         role=CustomerRole.OWNER,
     )
     db.add(cu_link)
+
+    # Create default Application (required for API key creation)
+    default_app = Application(
+        customer_id=customer.id,
+        name=f"{user_in.company_name} - Default",
+        description="Auto-created default application",
+    )
+    db.add(default_app)
+    await db.flush()
 
     # Create Wallet with initial credits
     await WalletService.get_or_create_wallet(db, customer.id)

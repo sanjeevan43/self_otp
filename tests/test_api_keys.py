@@ -17,8 +17,19 @@ async def test_api_keys_lifecycle(client: AsyncClient) -> None:
     access_token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    # 1. Create API Key
-    key_res = await client.post("/v1/api-keys", json={"name": "Production Key"}, headers=headers)
+    # Get default application created during registration
+    apps_res = await client.get("/v1/applications", headers=headers)
+    assert apps_res.status_code == 200
+    apps = apps_res.json()
+    assert len(apps) >= 1
+    app_id = apps[0]["id"]
+
+    # 1. Create API Key (with required application_id)
+    key_res = await client.post(
+        "/v1/api-keys",
+        json={"name": "Production Key", "application_id": app_id},
+        headers=headers,
+    )
     assert key_res.status_code == 201
     key_data = key_res.json()
     assert "raw_secret_key" in key_data

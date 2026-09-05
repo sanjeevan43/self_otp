@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDMixin
-from app.models.enums import APIKeyStatus
+from app.models.enums import APIKeyStatus, EnvironmentType
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
@@ -20,8 +20,11 @@ class APIKey(Base, UUIDMixin, TimestampMixin):
     customer_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    application_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True, index=True
+    application_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    environment: Mapped[EnvironmentType] = mapped_column(
+        SQLEnum(EnvironmentType), nullable=False, default=EnvironmentType.DEVELOPMENT
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -80,7 +80,7 @@ class WebhookEvent(Base, UUIDMixin):
 
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     event_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True, unique=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     processing_status: Mapped[WebhookProcessingStatus] = mapped_column(
         SQLEnum(WebhookProcessingStatus),

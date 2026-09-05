@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_api_key_customer, get_current_user
+from app.api.deps import get_api_key_context, get_current_user
 from app.database import get_db
 from app.models.api_key import APIKey
+from app.models.application import Application
 from app.models.customer import Customer
 from app.models.user import User
 from app.models.wallet import WalletTransaction
@@ -18,11 +19,11 @@ router = APIRouter(prefix="/wallet", tags=["Wallet & Billing"])
 
 @router.get("/balance", response_model=WalletBalanceResponse)
 async def get_wallet_balance(
-    api_auth: Annotated[tuple[APIKey, Customer], Depends(get_api_key_customer)],
+    api_auth: Annotated[tuple[APIKey, Application, Customer], Depends(get_api_key_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, str | dict[str, Any]]:
     """Returns current wallet balance for the customer account."""
-    _, customer = api_auth
+    _, _, customer = api_auth
     wallet = await WalletService.get_or_create_wallet(db, customer.id)
     return {
         "status": "success",

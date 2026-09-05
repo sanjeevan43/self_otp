@@ -36,10 +36,14 @@ class WalletService:
         reference_id: str,
     ) -> float:
         """
-        Executes atomic wallet deduction.
+        Executes atomic wallet deduction using row-level locking.
         Raises HTTP 402 PAYMENT_REQUIRED if balance is below cost.
         """
-        wallet = await WalletService.get_or_create_wallet(session, customer_id)
+        await WalletService.get_or_create_wallet(session, customer_id)
+        
+        stmt = select(Wallet).where(Wallet.customer_id == customer_id).with_for_update()
+        wallet = (await session.execute(stmt)).scalar_one()
+        
         balance_before = wallet.balance
 
         if balance_before < cost:
@@ -47,35 +51,14 @@ class WalletService:
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail={
                     "code": "INSUFFICIENT_FUNDS",
-                    "message": "Wallet balance is insufficient to dispatch OTP.",
+                    "message": "Wallet balance is insufficient.",
                     "current_balance": balance_before,
                     "required_credits": cost,
                 },
             )
 
-        # Atomic SQL update
-        stmt = (
-            update(Wallet)
-            .where(Wallet.id == wallet.id, Wallet.balance >= cost)
-            .values(balance=Wallet.balance - cost)
-            .execution_options(synchronize_session="fetch")
-        )
-        result = await session.execute(stmt)
-
-        rowcount = getattr(result, "rowcount", 0)
-        if rowcount == 0:
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={
-                    "code": "INSUFFICIENT_FUNDS",
-                    "message": "Wallet balance is insufficient to dispatch OTP.",
-                    "current_balance": balance_before,
-                    "required_credits": cost,
-                },
-            )
-
-        await session.refresh(wallet)
-        balance_after = wallet.balance
+        balance_after = balance_before - cost
+        wallet.balance = balance_after
 
         # Add immutable transaction ledger entry
         transaction = WalletTransaction(
@@ -101,13 +84,16 @@ class WalletService:
         reference_id: str,
         reason: str = "Meta delivery failure",
     ) -> float:
-        """Refunds credits to wallet on delivery failure."""
-        wallet = await WalletService.get_or_create_wallet(session, customer_id)
+        """Refunds credits to wallet on delivery failure using row-level locking."""
+        await WalletService.get_or_create_wallet(session, customer_id)
+        
+        stmt = select(Wallet).where(Wallet.customer_id == customer_id).with_for_update()
+        wallet = (await session.execute(stmt)).scalar_one()
+        
         balance_before = wallet.balance
         balance_after = balance_before + cost
 
         wallet.balance = balance_after
-        await session.flush()
 
         transaction = WalletTransaction(
             wallet_id=wallet.id,
@@ -130,13 +116,16 @@ class WalletService:
         amount: float,
         reference_id: str,
     ) -> float:
-        """Topup credits to wallet on payment gateway success."""
-        wallet = await WalletService.get_or_create_wallet(session, customer_id)
+        """Topup credits to wallet on payment gateway success using row-level locking."""
+        await WalletService.get_or_create_wallet(session, customer_id)
+        
+        stmt = select(Wallet).where(Wallet.customer_id == customer_id).with_for_update()
+        wallet = (await session.execute(stmt)).scalar_one()
+        
         balance_before = wallet.balance
         balance_after = balance_before + amount
 
         wallet.balance = balance_after
-        await session.flush()
 
         transaction = WalletTransaction(
             wallet_id=wallet.id,

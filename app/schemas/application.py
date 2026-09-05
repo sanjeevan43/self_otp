@@ -1,13 +1,11 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
 
-from app.models.enums import EnvironmentType
+from pydantic import BaseModel, Field
 
 
 class ApplicationBase(BaseModel):
     name: str = Field(..., max_length=100)
     description: str | None = Field(None, max_length=500)
-    environment: EnvironmentType = Field(default=EnvironmentType.DEVELOPMENT)
 
 
 class ApplicationCreate(ApplicationBase):
@@ -17,7 +15,6 @@ class ApplicationCreate(ApplicationBase):
 class ApplicationUpdate(BaseModel):
     name: str | None = Field(None, max_length=100)
     description: str | None = Field(None, max_length=500)
-    environment: EnvironmentType | None = None
 
 
 class ApplicationResponse(ApplicationBase):

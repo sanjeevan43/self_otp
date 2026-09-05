@@ -41,6 +41,9 @@ class IdempotencyKey(Base, UUIDMixin):
     customer_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("customers.id"), nullable=False, index=True
     )
+    application_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("applications.id"), nullable=False, index=True
+    )
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
