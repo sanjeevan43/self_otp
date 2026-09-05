@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WhatsApp OTP API — Live Supabase Documentation</title>
+  <title>Meta WhatsApp OTP API SaaS — Live Swagger UI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
   <link rel="icon" type="image/png" href="https://supabase.com/favicon/favicon-32x32.png" />
@@ -10,18 +10,17 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: #0f172a;
+      background: #0b0f19;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #334155;
     }
     .top-header {
       background: linear-gradient(135deg, #059669 0%, #10b981 100%);
       color: #ffffff;
-      padding: 20px 32px;
+      padding: 18px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }
     .header-title {
       font-size: 20px;
@@ -46,19 +45,20 @@
       border: 1px solid #10b981;
     }
     #swagger-ui {
-      max-width: 1200px;
-      margin: 24px auto 48px auto;
+      max-width: 1320px;
+      margin: 24px auto 60px auto;
       background: #ffffff;
       border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
       overflow: hidden;
-      padding: 16px 24px;
+      padding: 16px 28px;
     }
+    .swagger-ui .topbar { display: none; }
   </style>
 </head>
 <body>
   <div class="top-header">
-    <div class="header-title">⚡ WhatsApp OTP API Platform — Live Documentation</div>
+    <div class="header-title">⚡ Meta WhatsApp OTP API SaaS Platform — Full API Reference</div>
     <div class="header-meta">
       <span class="badge badge-live">● Live on Supabase Edge Functions</span>
       <span class="badge">Project: ymstmdjdgwnmtxgurhyn</span>
@@ -80,7 +80,6 @@
         ],
         layout: "BaseLayout",
         onComplete: function() {
-          // Pre-populate demo API key for instant testing
           ui.preauthorizeApiKey("ApiKeyAuth", "wotp_live_demo_secret_key_1234567890abcdef");
         }
       });
