@@ -8,6 +8,9 @@ import { requestIdPlugin } from "./middleware/request-id.js";
 import { authPlugin } from "./plugins/auth.js";
 import { errorHandler } from "./middleware/error-handler.js";
 
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
+
 // Routes
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
@@ -38,6 +41,60 @@ export function buildApp(): FastifyInstance {
   // Custom middleware plugins
   app.register(requestIdPlugin);
   app.register(authPlugin);
+
+  // Swagger documentation
+  app.register(fastifySwagger, {
+    openapi: {
+      info: {
+        title: "Meta WhatsApp OTP API SaaS Platform",
+        description: "Production-Grade Meta WhatsApp OTP SaaS API in Node.js, TypeScript, Fastify, Prisma & BullMQ.",
+        version: "1.0.0",
+      },
+      servers: [
+        { url: `http://localhost:${env.PORT}`, description: "Local API Server" },
+      ],
+      components: {
+        securitySchemes: {
+          ApiKeyAuth: {
+            type: "apiKey",
+            name: "X-API-Key",
+            in: "header",
+            description: "Customer API Key (format: wotp_live_...)",
+          },
+          BearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Dashboard User JWT Access Token",
+          },
+        },
+      },
+    },
+  });
+
+  app.register(fastifySwaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: true,
+    },
+  });
+
+  // Alias /swagger to /docs
+  app.get("/swagger", async (_req, reply) => {
+    return reply.redirect("/docs");
+  });
+
+  // Full interactive Swagger UI page (all 13 endpoint groups)
+  app.get("/api-docs", async (_req, reply) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const htmlPath = path.resolve(process.cwd(), "api_docs.html");
+    if (fs.existsSync(htmlPath)) {
+      return reply.type("text/html; charset=utf-8").send(fs.readFileSync(htmlPath, "utf8"));
+    }
+    return reply.redirect("/docs");
+  });
 
   // Global error handler
   app.setErrorHandler(errorHandler);

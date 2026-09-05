@@ -9,23 +9,60 @@ import { Prisma } from "@prisma/client";
 
 export const webhookRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /v1/webhooks/meta - Handshake challenge
-  fastify.get("/meta", async (request, reply) => {
-    const query = request.query as Record<string, string | undefined>;
-    const mode = query["hub.mode"];
-    const token = query["hub.verify_token"];
-    const challenge = query["hub.challenge"];
+  fastify.get(
+    "/meta",
+    {
+      schema: {
+        tags: ["Webhooks"],
+        summary: "Meta WhatsApp webhook handshake verification",
+        description: "Responds to Meta WhatsApp Cloud API verification challenge during webhook setup.",
+        querystring: {
+          type: "object",
+          properties: {
+            "hub.mode": { type: "string", description: "Meta mode (e.g. subscribe)" },
+            "hub.verify_token": { type: "string", description: "Verification token set in Meta App dashboard" },
+            "hub.challenge": { type: "string", description: "Random challenge string to echo back" },
+          },
+          required: ["hub.mode", "hub.verify_token", "hub.challenge"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const query = request.query as Record<string, string | undefined>;
+      const mode = query["hub.mode"];
+      const token = query["hub.verify_token"];
+      const challenge = query["hub.challenge"];
 
-    if (mode === "subscribe" && token === env.META_WEBHOOK_VERIFY_TOKEN) {
-      logger.info("Meta webhook verification challenge succeeded.");
-      return reply.status(200).type("text/plain").send(challenge);
+      if (mode === "subscribe" && token === env.META_WEBHOOK_VERIFY_TOKEN) {
+        logger.info("Meta webhook verification challenge succeeded.");
+        return reply.status(200).type("text/plain").send(challenge);
+      }
+
+      logger.warn("Meta webhook verification challenge failed: token mismatch.");
+      throw new ForbiddenError("Verification token mismatch.", "FORBIDDEN");
     }
-
-    logger.warn("Meta webhook verification challenge failed: token mismatch.");
-    throw new ForbiddenError("Verification token mismatch.", "FORBIDDEN");
-  });
+  );
 
   // POST /v1/webhooks/meta - Inbound webhook ingestion
-  fastify.post("/meta", async (request, reply) => {
+  fastify.post(
+    "/meta",
+    {
+      schema: {
+        tags: ["Webhooks"],
+        summary: "Meta WhatsApp webhook event ingestion",
+        description: "Receives real-time delivery status updates (sent, delivered, read, failed) from Meta WhatsApp Cloud API.",
+        headers: {
+          type: "object",
+          properties: {
+            "x-hub-signature-256": {
+              type: "string",
+              description: "HMAC-SHA256 signature calculated with META_APP_SECRET",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
     const rawBody = (request as any).rawBody || JSON.stringify(request.body);
     const signatureHeader = request.headers["x-hub-signature-256"] as string | undefined;
 
