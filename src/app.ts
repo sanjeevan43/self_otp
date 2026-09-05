@@ -14,6 +14,7 @@ import fastifySwaggerUi from "@fastify/swagger-ui";
 // Routes
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
+import { accountRoutes } from "./modules/account/account.routes.js";
 import { applicationRoutes } from "./modules/applications/applications.routes.js";
 import { apiKeyRoutes } from "./modules/api-keys/api-keys.routes.js";
 import { walletRoutes } from "./modules/wallet/wallet.routes.js";
@@ -51,6 +52,7 @@ export function buildApp(): FastifyInstance {
         version: "1.0.0",
       },
       servers: [
+        { url: "/", description: "Current Server (Auto-detected)" },
         { url: `http://localhost:${env.PORT}`, description: "Local API Server" },
       ],
       components: {
@@ -80,19 +82,12 @@ export function buildApp(): FastifyInstance {
     },
   });
 
-  // Alias /swagger to /docs
+  // Alias /swagger and /api-docs to /docs
   app.get("/swagger", async (_req, reply) => {
     return reply.redirect("/docs");
   });
 
-  // Full interactive Swagger UI page (all 13 endpoint groups)
   app.get("/api-docs", async (_req, reply) => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const htmlPath = path.resolve(process.cwd(), "api_docs.html");
-    if (fs.existsSync(htmlPath)) {
-      return reply.type("text/html; charset=utf-8").send(fs.readFileSync(htmlPath, "utf8"));
-    }
     return reply.redirect("/docs");
   });
 
@@ -104,6 +99,7 @@ export function buildApp(): FastifyInstance {
 
   // API v1 routes
   app.register(authRoutes, { prefix: "/v1/auth" });
+  app.register(accountRoutes, { prefix: "/v1/account" });
   app.register(applicationRoutes, { prefix: "/v1/applications" });
   app.register(apiKeyRoutes, { prefix: "/v1/api-keys" });
   app.register(walletRoutes, { prefix: "/v1/wallet" });

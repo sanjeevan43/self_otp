@@ -71,17 +71,14 @@
   <script>
     window.onload = function() {
       const ui = SwaggerUIBundle({
-        url: "https://ymstmdjdgwnmtxgurhyn.supabase.co/functions/v1/otp/openapi.json",
+        url: "/docs/json",
         dom_id: '#swagger-ui',
         deepLinking: true,
         presets: [
           SwaggerUIBundle.presets.apis,
           SwaggerUIBundle.SwaggerUIStandalonePreset
         ],
-        layout: "BaseLayout",
-        onComplete: function() {
-          ui.preauthorizeApiKey("ApiKeyAuth", "wotp_live_demo_secret_key_1234567890abcdef");
-        }
+        layout: "BaseLayout"
       });
       window.ui = ui;
     };
